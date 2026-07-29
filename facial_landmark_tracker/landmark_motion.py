@@ -10,6 +10,8 @@ FaceLandmarker = mp.tasks.vision.FaceLandmarker
 FaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
 VisionRunningMode = mp.tasks.vision.RunningMode
 
+CALIBRATION_FRAMES = 60  # 2 seconds at 30 FPS
+
 # get google's model
 MODEL_PATH = 'facial_landmark_tracker/face_landmarker.task'
 
@@ -156,6 +158,80 @@ def plot_pspi_history(pspi_history, pain_threshold, out_path="pspi_score.png"):
     print(f"Saved plot to {out_path}")
     
 
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+def plot_enhanced_pspi_history(
+    pspi_history, 
+    pain_threshold=1.5, 
+    baseline_frames=60, # amount of seconds (30fps) at the beginning where neutral state is calculated
+    smoothing_window=5, 
+    out_path="enhanced_pspi_score.png"
+):
+    """
+    Plots an enhanced PSPI graph with the following additions:
+    1. The baseline face state (resting face) is substracted for a more accurate reading
+    2. Temporal moving average smoothing
+    """
+
+    # 1. Baseline Calibration
+
+    # calculate the average resting (neutral) pain score during the first few seconds (baseline_frames) of the video
+    # np.mean() will return NaN if even one element in the list is NaN (e.g., if a face wasn't detected for a frame)
+    # nanmean ignores missing values (NaNs)
+    # could it also be nanmedian? (something to experiment)
+    neutral_baseline_score = np.nanmean(pspi_history[:baseline_frames])
+
+    # subtract the resting baseline from each frame score, clamping negative results to 0.0
+    # if the frame had no face detected (NaN), keep it as NaN
+    calibrated_pspi_history = [
+        max(0.0, raw_score - neutral_baseline_score) if not np.isnan(raw_score) else np.nan 
+        for raw_score in pspi_history
+    ]
+
+    
+    # 2. Temporal Smoothing
+    # applies a moving average filter over time
+    # instead of relying on a single noisy frame, it takes the average of the current frame and its preceding frames
+    
+    # convert list into a Pandas Series object, which allows advanced time-series operations
+    # create a sliding window across the array (looking at 5 frames which is current + previous 4)
+    # get the mean and conver it back intto a numpy array for plotting
+    smoothed_pspi = pd.Series(calibrated_pspi_history).rolling(window=smoothing_window, min_periods=1).mean().to_numpy()
+    
+    # plotting
+    fig, ax = plt.subplots(figsize=(10, 4))
+    frames = np.arange(len(smoothed_pspi))
+    
+    # plot raw vs smoothed lines (keep raw line faint for comparison, but can choose a different colour)
+    ax.plot(calibrated_pspi_history, color="lightcoral", alpha=0.4, label="Raw PSPI Score WITH Baseline Adjusted")
+    ax.plot(smoothed_pspi, color="darkred", linewidth=2, label=f"Smoothed Score ({smoothing_window}-frame avg)")
+    
+    # draw pain threshold line
+    ax.axhline(pain_threshold, color="black", linestyle="--", label=f"Threshold ({pain_threshold})")
+    
+    # shade pain zones in red
+    ax.fill_between(
+        frames, 
+        smoothed_pspi, 
+        pain_threshold, 
+        where=(smoothed_pspi >= pain_threshold), 
+        color="red", 
+        alpha=0.35, 
+        label="Pain Zone"
+    )
+
+    # formatting
+    ax.set_xlabel("Frame Number")
+    ax.set_ylabel("Adjusted PSPI Score")
+    ax.set_title(f"Calibrated PSPI Over Time (Neutral Baseline: {neutral_baseline_score:.2f})")
+    ax.legend(loc="upper right", fontsize=8)
+    
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
+    print(f"Saved enhanced plot to {out_path}")
+
 # configure landmarker for VIDEO mode
 options = FaceLandmarkerOptions(
     base_options=BaseOptions(model_asset_path=MODEL_PATH),
@@ -220,6 +296,25 @@ with FaceLandmarker.create_from_options(options) as landmarker:
         # perform detection on the frame
         result = landmarker.detect_for_video(mp_image, frame_timestamp_ms)
 
+
+        
+        if frame_count <= CALIBRATION_FRAMES:
+            text = "CALIBRATING... Keep face neutral"
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.8
+            thickness = 2
+            color = (255, 255, 0)
+
+            # get the width and height of the text box
+            (text_width, text_height), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+
+            # calculate the center X and Y coordinates
+            # (w and h come from frame.shape: h, w, _ = frame.shape)
+            text_x = (w - text_width) // 2
+            text_y = (h + text_height) // 2
+            
+            cv2.putText(frame, text, (text_x, text_y), font, font_scale, color, thickness)
+            
         # if landmarks detected
         if result.face_landmarks:
 
@@ -301,3 +396,4 @@ cv2.destroyAllWindows()
 plot_landmark_motion(landmark_history)
 plot_blendshape_history(blendshape_history)
 plot_pspi_history(pspi_history, PAIN_THRESHOLD)
+plot_enhanced_pspi_history(pspi_history)
