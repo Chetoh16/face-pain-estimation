@@ -60,7 +60,7 @@ with FaceLandmarker.create_from_options(options) as landmarker:
                     cx, cy = int(landmark.x * w), int(landmark.y * h)
 
                     # OpenCV uses BGR instead of RGB (sure go be unique)
-                    cv2.circle(frame, (cx,cy), 1, (24, 0, 201), -1)
+                    cv2.circle(frame, (cx,cy), 1, (0, 250, 0), -1)
 
         # window for displaying video
         cv2.imshow("Facial Landmarks", frame)
