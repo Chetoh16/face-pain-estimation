@@ -1,10 +1,6 @@
 import cv2
 import mediapipe as mp
-from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
-
-
-
 
 BaseOptions = mp.tasks.BaseOptions
 FaceLandmarker = mp.tasks.vision.FaceLandmarker
@@ -19,7 +15,8 @@ model_path = 'facial_landmark_tracker/face_landmarker.task'
 options = FaceLandmarkerOptions(
     base_options=BaseOptions(model_asset_path=model_path),
     running_mode=VisionRunningMode.VIDEO,
-    num_faces = 1
+    num_faces = 1,
+    output_face_blendshapes = True
 )
 
 # capture webcam (0 for internal more for external cameras)
@@ -37,6 +34,7 @@ with FaceLandmarker.create_from_options(options) as landmarker:
         if not success:
             break
 
+        # height and with
         h, w, _ = frame.shape
         
         # convert OpenCV BGR frame to MediaPipe RGB Image format
@@ -61,6 +59,14 @@ with FaceLandmarker.create_from_options(options) as landmarker:
 
                     # OpenCV uses BGR instead of RGB (sure go be unique)
                     cv2.circle(frame, (cx,cy), 1, (0, 250, 0), -1)
+
+        # check that blendshapes come through
+        # result.face_blendshapes is a list (one entry per detected face)
+        # each entry is a list of Category objects with .category_name and .score
+        if result.face_blendshapes:
+            first_blendshape = result.face_blendshapes[0][0]
+            print(f"{first_blendshape.category_name}: {first_blendshape.score:.3f}")
+
 
         # window for displaying video
         cv2.imshow("Facial Landmarks", frame)
