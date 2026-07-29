@@ -2,6 +2,12 @@
 
 A small proof-of-concept / demo that estimates a heuristic "pain score" from a face, live from a webcam or from a video file, using MediaPipe's face landmark and blendshape detection.
 
+## Example Output
+![Pain Test](./facial_landmark_pain_detector/assets/pain-test.png)
+![PSPI-Enhanced](./facial_landmark_pain_detector/assets/enhanced_pspi_score.png)
+![Landmark Movement](./facial_landmark_pain_detector/assets/landmark_motion.png)
+![Blendshape Movement](./facial_landmark_pain_detector/assets/blendshape_motion.png)
+
 ## What it does
 
 The `landmark_motion.py` script tracks a face frame-by-frame and computes a proxy* of the **PSPI (Prkachin & Solomon Pain Intensity)** score which is the formula/metric used to classify four levels of pain intensity (none, trace, weak, and strong).
