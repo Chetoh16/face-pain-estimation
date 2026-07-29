@@ -14,6 +14,7 @@ VisionRunningMode = mp.tasks.vision.RunningMode
 # get google's model
 model_path = 'facial_landmark_tracker/face_landmarker.task'
 
+
 # configure landmarker for VIDEO mode
 options = FaceLandmarkerOptions(
     base_options=BaseOptions(model_asset_path=model_path),
@@ -30,17 +31,19 @@ with FaceLandmarker.create_from_options(options) as landmarker:
 
         # cap.Read reads images (30 images per second) from the camera (which are stored in image)
         # if unsuccessful, success variabe will be False
-        success, image = cap.read()
+        success, frame = cap.read()
 
 
         if not success:
             break
 
+        h, w, _ = frame.shape
+        
         # convert OpenCV BGR frame to MediaPipe RGB Image format
-        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
         # load input frames as numpy arrays
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
         # calculate timestamp in milliseconds required for VIDEO mode
         frame_timestamp_ms = int(cap.get(cv2.CAP_PROP_POS_MSEC))
@@ -51,10 +54,16 @@ with FaceLandmarker.create_from_options(options) as landmarker:
         # print landmarks when detected
         if result.face_landmarks:
             for face_landmarks in result.face_landmarks:
-                print(f"Detected {len(face_landmarks)} landmarks")
+                for landmark in face_landmarks:
+
+                    # draw circles for all landmarks
+                    cx, cy = int(landmark.x * w), int(landmark.y * h)
+
+                    # OpenCV uses BGR instead of RGB (sure go be unique)
+                    cv2.circle(frame, (cx,cy), 1, (24, 0, 201), -1)
 
         # window for displaying video
-        cv2.imshow("My video capture", cv2.flip(image,1))
+        cv2.imshow("Facial Landmarks", frame)
 
         # 0xFF extracts the pressed key ('q') across different operating systems
         # press q to quit
