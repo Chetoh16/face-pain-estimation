@@ -180,7 +180,7 @@ def plot_blendshape_history(blendshape_history, out_path="blendshape_motion.png"
     print(f"Saved plot to {out_path}")
 
 
-def plot_pspi_history(pspi_history, pain_threshold, out_path="pspi_score.png"):
+def plot_pspi_history(pspi_history, pain_threshold=PAIN_THRESHOLD, out_path="pspi_score.png"):
     """Plot the combined PSPI score over time, with the PAIN threshold marked."""
 
     fig, ax = plt.subplots(figsize=(10, 4))
@@ -413,7 +413,7 @@ def run_detector(video_source, model_path=MODEL_PATH,  display=True, pain_thresh
                 cv2.putText(frame, f"PSPI: {pspi_score:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 250, 0), 2)
 
                 # if pspi_score is above pain threshold, write PAIN on screen
-                if pspi_score >= PAIN_THRESHOLD:
+                if pspi_score >= pain_threshold:
                     cv2.putText(frame, "PAIN", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1.4, (0, 0, 255), 3)
 
                 print(f"PSPI score: {pspi_score:.3f}")
@@ -473,6 +473,6 @@ if __name__ == "__main__":
     # generate the plots
     plot_landmark_motion(landmark_history)
     plot_blendshape_history(blendshape_history)
-    plot_pspi_history(pspi_history, PAIN_THRESHOLD)
-    plot_enhanced_pspi_history(pspi_history)
+    plot_pspi_history(pspi_history, pain_threshold=args.pain_threshold)
+    plot_enhanced_pspi_history(pspi_history, pain_threshold=args.pain_threshold)
 
