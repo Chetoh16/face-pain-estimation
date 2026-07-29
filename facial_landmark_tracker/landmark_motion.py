@@ -11,6 +11,27 @@ VisionRunningMode = mp.tasks.vision.RunningMode
 model_path = 'facial_landmark_tracker/face_landmarker.task'
 
 
+# the blendshapes/expressions related to pain, grouped by which AU (Action Unit, NOT Alternative Universe) they're close to
+PAIN_RELEVANT_BLENDSHAPES = [
+    
+    # ~AU4  brow lowerer
+    "browDownLeft", "browDownRight",
+
+    # ~AU6/7 cheek raiser / lid tightener
+    "eyeSquintLeft", "eyeSquintRight",
+
+    # ~AU9  nose wrinkler
+    "noseSneerLeft", "noseSneerRight",
+
+    # ~AU10 upper lip raiser
+    "mouthUpperUpLeft", "mouthUpperUpRight",
+
+    # ~AU43 eye closure
+    "eyeBlinkLeft", "eyeBlinkRight",
+]
+
+
+
 # configure landmarker for VIDEO mode
 options = FaceLandmarkerOptions(
     base_options=BaseOptions(model_asset_path=model_path),
