@@ -179,7 +179,7 @@ def plot_pspi_history(pspi_history, pain_threshold, out_path="pspi_score.png"):
 
 def plot_enhanced_pspi_history(
     pspi_history, 
-    pain_threshold=1.5, 
+    pain_threshold=PAIN_THRESHOLD, 
     baseline_frames=60, # amount of seconds (30fps) at the beginning where neutral state is calculated
     smoothing_window=5, 
     out_path="enhanced_pspi_score.png"
@@ -430,7 +430,7 @@ if __name__ == "__main__":
     parser.add_argument("--webcam", action="store_true", help="Use webcam instead")
     parser.add_argument("--model", type=str, default=MODEL_PATH, help="Path to .task model file")
     parser.add_argument("--no-display", action="store_true", help="Skip live OpenCV window")
-    parser.add_argument("--pain-threshold", type=float, default=1.5, help="PSPI score above which 'PAIN' is shown")
+    parser.add_argument("--pain-threshold", type=float, default=PAIN_THRESHOLD, help="PSPI score above which 'PAIN' is shown")
 
     # read arguments passed from terminal
     args = parser.parse_args()
