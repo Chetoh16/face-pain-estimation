@@ -1,10 +1,32 @@
+"""
+Facial landmark + blendshape motion tracker (MediaPipe Tasks API)
+
+Uses the modern MediaPipe Tasks API (FaceLandmarker), not the deprecated
+`mp.solutions` API. 
+Works on a video file or live webcam.
+Tracks landmark motion over time AND blendshape scores (52 expression coefficients Google provides alongside the landmarks)
+ 
+ 
+Usage:
+    python landmark_motion.py --video path/to/clip.mp4
+    python landmark_motion.py --webcam
+    python landmark_motion.py --video clip.mp4 --no-display   # skip live window, just process + plot
+"""
+
+
 import cv2
 import mediapipe as mp
 import numpy as np
 from mediapipe.tasks.python import vision
 import pandas as pd
 import matplotlib.pyplot as plt
+import argparse
+import os
 
+# get google's model
+# automatically locate face_landmarker.task relative to this script's directory
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(SCRIPT_DIR, 'face_landmarker.task')
 
 BaseOptions = mp.tasks.BaseOptions
 FaceLandmarker = mp.tasks.vision.FaceLandmarker
@@ -12,10 +34,6 @@ FaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
 VisionRunningMode = mp.tasks.vision.RunningMode
 
 CALIBRATION_FRAMES = 60  # 2 seconds at 30 FPS
-
-# get google's model
-MODEL_PATH = 'facial_landmark_tracker/face_landmarker.task'
-
 
 PAIN_RELEVANT_LANDMARKS = {
     "left_brow_inner": 55,
@@ -229,168 +247,207 @@ def plot_enhanced_pspi_history(
     fig.savefig(out_path, dpi=150)
     print(f"Saved enhanced plot to {out_path}")
 
-# configure landmarker for VIDEO mode
-options = FaceLandmarkerOptions(
-    base_options=BaseOptions(model_asset_path=MODEL_PATH),
-    running_mode=VisionRunningMode.VIDEO,
-    num_faces = 1,
-    output_face_blendshapes = True
-)
 
-# capture webcam (0 for internal more for external cameras)
-cap = cv2.VideoCapture(0)
+def run_landmarker(video_source, model_path=MODEL_PATH,  display=True, pain_threshold=PAIN_THRESHOLD):
 
-# containers that persist across the whole session, one entry appended per frame.
-# this is what makes "sequence-level" analysis possible afterward
-# -- without this, each frame's data is thrown away the instant we move on.
+    # configure landmarker for VIDEO mode
+    options = FaceLandmarkerOptions(
+        base_options=BaseOptions(model_asset_path=model_path),
+        running_mode=VisionRunningMode.VIDEO,
+        num_faces = 1,
+        output_face_blendshapes = True
+    )
 
+    # capture video (0 for webcam)
+    cap = cv2.VideoCapture(video_source)
 
-# Session Time-Series Data (Persists across all frames)
-# these containers/dictionaries persist across the whole session, one entry appended per frame.
-# this is what makes "sequence-level" analysis possible afterward. 
-# helps with:
-# temporal smoothing (removing single-frame noise like random blinks).
-# baseline calibration (adjusting for a user's natural neutral expression).
-# plotting trend lines and identifying pain duration over time.
-
-# tracks (x, y) pixel coordinates for key facial features across every frame
-landmark_history = {name: [] for name in PAIN_RELEVANT_LANDMARKS}
-
-# tracks intensity scores (0.0 to 1.0) for pain-related blendshapes
-blendshape_history = {name: [] for name in PAIN_RELEVANT_BLENDSHAPES}
-
-# tracks the calculated PSPI pain score for each frame
-pspi_history = []
-
-frame_count = 0
-
-with FaceLandmarker.create_from_options(options) as landmarker:
-
-    while cap.isOpened():
-
-        # cap.Read reads images (30 images per second) from the camera (which are stored in image)
-        # if unsuccessful, success variabe will be False
-        success, frame = cap.read()
+    # containers that persist across the whole session, one entry appended per frame.
+    # this is what makes "sequence-level" analysis possible afterward
+    # -- without this, each frame's data is thrown away the instant we move on.
 
 
-        if not success:
-            break
+    # Session Time-Series Data (Persists across all frames)
+    # these containers/dictionaries persist across the whole session, one entry appended per frame.
+    # this is what makes "sequence-level" analysis possible afterward. 
+    # helps with:
+    # temporal smoothing (removing single-frame noise like random blinks).
+    # baseline calibration (adjusting for a user's natural neutral expression).
+    # plotting trend lines and identifying pain duration over time.
 
-        frame_count+= 1
+    # tracks (x, y) pixel coordinates for key facial features across every frame
+    landmark_history = {name: [] for name in PAIN_RELEVANT_LANDMARKS}
 
-        # height and with
-        h, w, _ = frame.shape
-        
-        # convert OpenCV BGR frame to MediaPipe RGB Image format
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    # tracks intensity scores (0.0 to 1.0) for pain-related blendshapes
+    blendshape_history = {name: [] for name in PAIN_RELEVANT_BLENDSHAPES}
 
-        # load input frames as numpy arrays
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+    # tracks the calculated PSPI pain score for each frame
+    pspi_history = []
 
-        # calculate timestamp in milliseconds required for VIDEO mode
-        frame_timestamp_ms = int(cap.get(cv2.CAP_PROP_POS_MSEC))
+    frame_count = 0
 
-        # perform detection on the frame
-        result = landmarker.detect_for_video(mp_image, frame_timestamp_ms)
+    with FaceLandmarker.create_from_options(options) as landmarker:
+
+        while cap.isOpened():
+
+            # cap.Read reads images (30 images per second) from the camera (which are stored in image)
+            # if unsuccessful, success variabe will be False
+            success, frame = cap.read()
 
 
-        
-        if frame_count <= CALIBRATION_FRAMES:
-            text = "CALIBRATING... Keep face neutral"
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = 0.8
-            thickness = 2
-            color = (255, 255, 0)
+            if not success:
+                break
 
-            # get the width and height of the text box
-            (text_width, text_height), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+            frame_count+= 1
 
-            # calculate the center X and Y coordinates
-            # (w and h come from frame.shape: h, w, _ = frame.shape)
-            text_x = (w - text_width) // 2
-            text_y = (h + text_height) // 2
+            # height and with
+            h, w, _ = frame.shape
             
-            cv2.putText(frame, text, (text_x, text_y), font, font_scale, color, thickness)
+            # convert OpenCV BGR frame to MediaPipe RGB Image format
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            # load input frames as numpy arrays
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+
+            # calculate timestamp in milliseconds required for VIDEO mode
+            frame_timestamp_ms = int(cap.get(cv2.CAP_PROP_POS_MSEC))
+
+            # perform detection on the frame
+            result = landmarker.detect_for_video(mp_image, frame_timestamp_ms)
+
+
             
-        # if landmarks detected
-        if result.face_landmarks:
+            if frame_count <= CALIBRATION_FRAMES:
+                text = "CALIBRATING... Keep face neutral"
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = 0.8
+                thickness = 2
+                color = (255, 255, 0)
 
-            # [0] = a list containing 478 individual landmark points for the first face
-            # result.face_landmarks[0][55] = a specific landmark object (e.g. index 55 for left_brow_inner)
-            face_landmarks = result.face_landmarks[0]
+                # get the width and height of the text box
+                (text_width, text_height), baseline = cv2.getTextSize(text, font, font_scale, thickness)
 
-            # record (x, y) coordinates for key tracked landmarks
-            # loop through the PAIN_RELEVANT_LANDMARKS dictionary
-            for name, index in PAIN_RELEVANT_LANDMARKS.items():
+                # calculate the center X and Y coordinates
+                # (w and h come from frame.shape: h, w, _ = frame.shape)
+                text_x = (w - text_width) // 2
+                text_y = (h + text_height) // 2
+                
+                cv2.putText(frame, text, (text_x, text_y), font, font_scale, color, thickness)
+                
+            # if landmarks detected
+            if result.face_landmarks:
 
-                # get landmark
-                landmark = face_landmarks[index]
+                # [0] = a list containing 478 individual landmark points for the first face
+                # result.face_landmarks[0][55] = a specific landmark object (e.g. index 55 for left_brow_inner)
+                face_landmarks = result.face_landmarks[0]
 
-                # mediapipe returns normalised coordinates between 0.0 and 1.0. 
-                # multiply `lm.x` by frame width (`w`) and `lm.y` by frame height (`h`) to convert them to pixel coordinates, 
-                # then append the (x, y) tuple to the history list for this specific landmark.
-                landmark_history[name].append((landmark.x * w, landmark.y * h))
+                # record (x, y) coordinates for key tracked landmarks
+                # loop through the PAIN_RELEVANT_LANDMARKS dictionary
+                for name, index in PAIN_RELEVANT_LANDMARKS.items():
 
-            # iterate through ALL 478 detected facial landmarks to draw them
-            for face_landmarks in result.face_landmarks:
-                for landmark in face_landmarks:
+                    # get landmark
+                    landmark = face_landmarks[index]
 
-                    # draw circles for all landmarks
-                    cx, cy = int(landmark.x * w), int(landmark.y * h)
+                    # mediapipe returns normalised coordinates between 0.0 and 1.0. 
+                    # multiply `lm.x` by frame width (`w`) and `lm.y` by frame height (`h`) to convert them to pixel coordinates, 
+                    # then append the (x, y) tuple to the history list for this specific landmark.
+                    landmark_history[name].append((landmark.x * w, landmark.y * h))
 
-                    # OpenCV uses BGR instead of RGB (sure go be unique)
-                    cv2.circle(frame, (cx,cy), 1, (0, 250, 0), -1)
-            
+                # iterate through ALL 478 detected facial landmarks to draw them
+                for face_landmarks in result.face_landmarks:
+                    for landmark in face_landmarks:
 
-        else:
-            # if no face detected, repeat the last known value so every list stays the same length (frame count)
-            # keeps things aligned for plotting later, instead of lists silently drifting out of sync.
-            for name in PAIN_RELEVANT_LANDMARKS:
-                landmark_history[name].append(landmark_history[name][-1] if landmark_history[name] else (np.nan, np.nan))
+                        # draw circles for all landmarks
+                        cx, cy = int(landmark.x * w), int(landmark.y * h)
+
+                        # OpenCV uses BGR instead of RGB (sure go be unique)
+                        cv2.circle(frame, (cx,cy), 1, (0, 250, 0), -1)
+                
+
+            else:
+                # if no face detected, repeat the last known value so every list stays the same length (frame count)
+                # keeps things aligned for plotting later, instead of lists silently drifting out of sync.
+                for name in PAIN_RELEVANT_LANDMARKS:
+                    landmark_history[name].append(landmark_history[name][-1] if landmark_history[name] else (np.nan, np.nan))
 
 
-        if result.face_blendshapes:
+            if result.face_blendshapes:
 
-            # bs for blendshape not the other word
-            scores = {bs.category_name: bs.score for bs in result.face_blendshapes[0]}
+                # bs for blendshape not the other word
+                scores = {bs.category_name: bs.score for bs in result.face_blendshapes[0]}
 
-            # record every pain-relevant blendshape's score this frame
-            for name in PAIN_RELEVANT_BLENDSHAPES:
-                blendshape_history[name].append(scores.get(name, np.nan))
-            
-            pspi_score = calculate_pspi(scores)
+                # record every pain-relevant blendshape's score this frame
+                for name in PAIN_RELEVANT_BLENDSHAPES:
+                    blendshape_history[name].append(scores.get(name, np.nan))
+                
+                pspi_score = calculate_pspi(scores)
 
-            # record the score itself to track its history/trajectory
-            pspi_history.append(pspi_score)
+                # record the score itself to track its history/trajectory
+                pspi_history.append(pspi_score)
 
-            # draw the pspi score on top left corner
-            cv2.putText(frame, f"PSPI: {pspi_score:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 250, 0), 2)
+                # draw the pspi score on top left corner
+                cv2.putText(frame, f"PSPI: {pspi_score:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 250, 0), 2)
 
-            # if pspi_score is above pain threshold, write PAIN on screen
-            if pspi_score >= PAIN_THRESHOLD:
-                cv2.putText(frame, "PAIN", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1.4, (0, 0, 255), 3)
+                # if pspi_score is above pain threshold, write PAIN on screen
+                if pspi_score >= PAIN_THRESHOLD:
+                    cv2.putText(frame, "PAIN", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1.4, (0, 0, 255), 3)
 
-            print(f"PSPI score: {pspi_score:.3f}")
+                print(f"PSPI score: {pspi_score:.3f}")
 
-        # do the same frame align method as when there's no landmarks
-        else:
-            for name in PAIN_RELEVANT_BLENDSHAPES:
-                blendshape_history[name].append(np.nan)
-            pspi_history.append(np.nan)
+            # do the same frame align method as when there's no landmarks
+            else:
+                for name in PAIN_RELEVANT_BLENDSHAPES:
+                    blendshape_history[name].append(np.nan)
+                pspi_history.append(np.nan)
 
-        # window for displaying video
-        cv2.imshow("Facial Landmarks", frame)
+            # window for displaying video
+            cv2.imshow("Facial Landmarks", frame)
 
-        # 0xFF extracts the pressed key ('q') across different operating systems
-        # press q to quit
-        if cv2.waitKey(1) == ord('q'):
-            break
+            # 0xFF extracts the pressed key ('q') across different operating systems
+            # press q to quit
+            if cv2.waitKey(1) == ord('q'):
+                break
 
-# release the camera
-cap.release()
-cv2.destroyAllWindows()
+    # release the camera
+    cap.release()
 
-plot_landmark_motion(landmark_history)
-plot_blendshape_history(blendshape_history)
-plot_pspi_history(pspi_history, PAIN_THRESHOLD)
-plot_enhanced_pspi_history(pspi_history)
+    # if it's a webcam, destroy the window that it's on
+    if display:
+        cv2.destroyAllWindows() 
+
+    return landmark_history, blendshape_history, pspi_history
+
+
+
+# Command Line Interface entry point 
+# lets you switch between webcam/file, model path, threshold, and headless mode without touching the code.
+if __name__ == "__main__":
+
+    # set up the terminal argument parser
+    parser = argparse.ArgumentParser(description="Track facial landmarks and pain scores.")
+
+    # arguments to add on the terminal after `python landmark_motion.py --xxx`
+    parser.add_argument("--video", type=str, help="Path to a video file")
+    parser.add_argument("--webcam", action="store_true", help="Use webcam instead")
+    parser.add_argument("--model", type=str, default=MODEL_PATH, help="Path to .task model file")
+    parser.add_argument("--no-display", action="store_true", help="Skip live OpenCV window")
+    parser.add_argument("--pain-threshold", type=float, default=1.5, help="PSPI score above which 'PAIN' is shown")
+
+    # read arguments passed from terminal
+    args = parser.parse_args()
+
+    # determine input source (0 for webcam index, or video file path)
+    source = 0 if args.webcam else args.video
+    if source is None:
+        raise SystemExit("Error: Specify an input using --webcam or --video path/to/video.mp4")
+
+    # run the program
+    landmark_history, blendshape_history, pspi_history = run_landmarker(
+        source, args.model, display=not args.no_display, pain_threshold=args.pain_threshold
+    )
+
+    # generate the plots
+    plot_landmark_motion(landmark_history)
+    plot_blendshape_history(blendshape_history)
+    plot_pspi_history(pspi_history, PAIN_THRESHOLD)
+    plot_enhanced_pspi_history(pspi_history)
+
