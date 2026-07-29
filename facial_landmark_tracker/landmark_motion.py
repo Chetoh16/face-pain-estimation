@@ -2,6 +2,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from mediapipe.tasks.python import vision
+import pandas as pd
 import matplotlib.pyplot as plt
 
 
@@ -157,10 +158,6 @@ def plot_pspi_history(pspi_history, pain_threshold, out_path="pspi_score.png"):
     fig.savefig(out_path, dpi=150)
     print(f"Saved plot to {out_path}")
     
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 
 def plot_enhanced_pspi_history(
     pspi_history, 
