@@ -2,6 +2,8 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from mediapipe.tasks.python import vision
+import matplotlib.pyplot as plt
+
 
 BaseOptions = mp.tasks.BaseOptions
 FaceLandmarker = mp.tasks.vision.FaceLandmarker
@@ -77,6 +79,82 @@ def calculate_pspi(blendshape_scores):
     pspi_score = au4 + au6_7 + au9_10 + au43
 
     return pspi_score
+
+
+# Draw Landmark Plot (how the face moves up and down)
+def plot_landmark_motion(landmark_history, out_path="landmark_motion.png"):
+    """Plot vertical (y) motion of each tracked landmark over time."""
+
+    # create a figure (canvas) and axes (drawing area) of size 10x5 inches
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    # loop through the landmark history dictionary
+    for name, points in landmark_history.items():
+
+        # take just the y-coordinate of each (x,y) pair
+        ys = [p[1] for p in points]
+
+        # plot the Y-coordinates on the graph and assign a label for the legend
+        ax.plot(ys, label=name)
+
+    # add titles and axis labels
+    ax.set_xlabel("Frame")
+    ax.set_ylabel("Vertical pixel position (y)")
+    ax.set_title("Facial landmark motion over time")
+
+    # place the legend box in the top-right corner with a small font size
+    ax.legend(loc="upper right", fontsize=8)
+
+    # in OpenCV, y=0 is the TOP of the screen, so smaller Y means HIGHER on the face
+    # invert y-axis so it's more intuitive
+    ax.invert_yaxis()
+
+    # adjust padding so text labels don't get cut off, then save as an image
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
+    print(f"Saved plot to {out_path}")
+
+
+def plot_blendshape_history(blendshape_history, out_path="blendshape_motion.png"):
+    """Plot each pain-relevant blendshape's activation over time."""
+
+    fig, ax = plt.subplots(figsize=(11, 5))
+
+    for name, scores in blendshape_history.items():
+        ax.plot(scores, label=name)
+
+    ax.set_xlabel("Frame")
+    ax.set_ylabel("Blendshape activation (0-1)")
+    ax.set_title("Pain-relevant blendshape activation over time")
+
+    ax.legend(loc="upper right", fontsize=7, ncol=2)
+
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
+    print(f"Saved plot to {out_path}")
+
+
+def plot_pspi_history(pspi_history, pain_threshold, out_path="pspi_score.png"):
+    """Plot the combined PSPI score over time, with the PAIN threshold marked."""
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+
+    # plot the PSPI score line in dark red
+    ax.plot(pspi_history, label="PSPI score", color="darkred")
+
+    # draw a horizontal dashed line across the plot at Y = pain_threshold
+    ax.axhline(pain_threshold, color="gray", linestyle="--", label=f"threshold ({pain_threshold})")
+
+    ax.set_xlabel("Frame")
+    ax.set_ylabel("PSPI score")
+    ax.set_title("PSPI pain score over time")
+
+    ax.legend(loc="upper right", fontsize=8)
+
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
+    print(f"Saved plot to {out_path}")
+    
 
 # configure landmarker for VIDEO mode
 options = FaceLandmarkerOptions(
@@ -216,7 +294,10 @@ with FaceLandmarker.create_from_options(options) as landmarker:
         if cv2.waitKey(1) == ord('q'):
             break
 
-    # release the camera
-    cap.release()
-    cv2.destroyAllWindows()
+# release the camera
+cap.release()
+cv2.destroyAllWindows()
 
+plot_landmark_motion(landmark_history)
+plot_blendshape_history(blendshape_history)
+plot_pspi_history(pspi_history, PAIN_THRESHOLD)
