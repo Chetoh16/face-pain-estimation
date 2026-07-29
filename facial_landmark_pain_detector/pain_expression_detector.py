@@ -425,7 +425,8 @@ def run_detector(video_source, model_path=MODEL_PATH,  display=True, pain_thresh
                 pspi_history.append(np.nan)
 
             # window for displaying video
-            cv2.imshow("Facial Landmarks", frame)
+            if display:
+                cv2.imshow("Facial Landmarks", frame)
 
             # 0xFF extracts the pressed key ('q') across different operating systems
             # press q to quit
