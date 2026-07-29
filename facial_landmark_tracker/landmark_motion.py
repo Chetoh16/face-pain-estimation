@@ -8,7 +8,7 @@ FaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
 VisionRunningMode = mp.tasks.vision.RunningMode
 
 # get google's model
-model_path = 'facial_landmark_tracker/face_landmarker.task'
+MODEL_PATH = 'facial_landmark_tracker/face_landmarker.task'
 
 
 # the blendshapes/expressions related to pain, grouped by which AU (Action Unit, NOT Alternative Universe) they're close to
@@ -29,6 +29,10 @@ PAIN_RELEVANT_BLENDSHAPES = [
     # ~AU43 eye closure
     "eyeBlinkLeft", "eyeBlinkRight",
 ]
+
+# threshold above which is considered "painful"
+# this is just a guess for now
+PAIN_THRESHOLD = 1.5
 
 def calculate_pspi(blendshape_scores):
     """
@@ -64,7 +68,7 @@ def calculate_pspi(blendshape_scores):
 
 # configure landmarker for VIDEO mode
 options = FaceLandmarkerOptions(
-    base_options=BaseOptions(model_asset_path=model_path),
+    base_options=BaseOptions(model_asset_path=MODEL_PATH),
     running_mode=VisionRunningMode.VIDEO,
     num_faces = 1,
     output_face_blendshapes = True
@@ -112,13 +116,18 @@ with FaceLandmarker.create_from_options(options) as landmarker:
                     cv2.circle(frame, (cx,cy), 1, (0, 250, 0), -1)
 
 
-        # {name: score} dict is used to get pspi score
         if result.face_blendshapes:
 
             # bs for blendshape not the other word
             scores = {bs.category_name: bs.score for bs in result.face_blendshapes[0]}
-
             pspi_score = calculate_pspi(scores)
+
+            # draw the pspi score on top left corner
+            cv2.putText(frame, f"PSPI: {pspi_score:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 250, 0), 2)
+
+            # if pspi_score is above pain threshold, write PAIN on screen
+            if pspi_score >= PAIN_THRESHOLD:
+                cv2.putText(frame, "PAIN", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1.4, (0, 0, 255), 3)
 
             print(f"PSPI score: {pspi_score:.3f}")
 
