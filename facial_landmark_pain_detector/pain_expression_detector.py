@@ -273,7 +273,7 @@ def plot_enhanced_pspi_history(
     print(f"Saved enhanced plot to {out_path}")
 
 
-def run_landmarker(video_source, model_path=MODEL_PATH,  display=True, pain_threshold=PAIN_THRESHOLD):
+def run_detector(video_source, model_path=MODEL_PATH,  display=True, pain_threshold=PAIN_THRESHOLD):
 
     # configure landmarker for VIDEO mode
     options = FaceLandmarkerOptions(
@@ -466,7 +466,7 @@ if __name__ == "__main__":
         raise SystemExit("Error: Specify an input using --webcam or --video path/to/video.mp4")
 
     # run the program
-    landmark_history, blendshape_history, pspi_history = run_landmarker(
+    landmark_history, blendshape_history, pspi_history = run_detector(
         source, args.model, display=not args.no_display, pain_threshold=args.pain_threshold
     )
 
